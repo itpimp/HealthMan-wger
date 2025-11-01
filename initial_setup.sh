@@ -64,25 +64,58 @@ generate_env() {
         cat > "$EXAMPLE" << 'EOF'
 # HealthMan-wger Environment Variables
 COMPOSE_PROJECT_NAME=HealthMan
+
+# Base Domain Configuration
+BASE_DOMAIN=healthman.breyninc.co.za
+
+# Service Domains (auto-configured if BASE_DOMAIN is set)
+WGER_DOMAIN=wger.healthman.breyninc.co.za
+RECIPES_DOMAIN=recipes.healthman.breyninc.co.za
+FLOW_DOMAIN=flow.healthman.breyninc.co.za
+DASH_DOMAIN=dash.healthman.breyninc.co.za
+
+# Database
 POSTGRES_USER=healthman
 POSTGRES_PASSWORD=change_me
 POSTGRES_DB=healthman
 REDIS_PASSWORD=__REDIS_PASSWORD__
+
+# Wger Configuration
 WGER_DEBUG=False
 WGER_SECRET_KEY=__WGER_SECRET__
-WGER_ALLOWED_HOSTS=localhost,127.0.0.1
+WGER_ALLOWED_HOSTS=localhost,127.0.0.1,wger.healthman.breyninc.co.za
+
+# Tandoor Configuration
 TANDOOR_SECRET_KEY=__TANDOOR_SECRET__
+
+# n8n Configuration
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_USER=admin
 N8N_PASSWORD=change_me
 N8N_ENCRYPTION_KEY=__N8N_ENCRYPTION_KEY__
-N8N_WEBHOOK_URL=http://localhost:5678
-N8N_HOST=localhost
-N8N_PROTOCOL=http
+N8N_WEBHOOK_URL=https://flow.healthman.breyninc.co.za
+N8N_HOST=flow.healthman.breyninc.co.za
+N8N_PROTOCOL=https
+
+# Grafana Configuration
 GRAFANA_USER=admin
 GRAFANA_PASSWORD=change_me
-GRAFANA_DOMAIN=localhost
-CADDY_ADMIN_EMAIL=admin@example.com
+GRAFANA_DOMAIN=dash.healthman.breyninc.co.za
+
+# Caddy Configuration
+CADDY_ADMIN_EMAIL=admin@healthman.breyninc.co.za
+
+# SMTP Email Configuration (for wger, Tandoor, Grafana notifications)
+# Configure these to enable email notifications
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+SMTP_FROM_EMAIL=your-email@gmail.com
+
+# Timezone
 TZ=UTC
 EOF
         echo -e "${GREEN}Created $EXAMPLE. Please review and customize.${NC}"
@@ -132,17 +165,26 @@ process_caddyfile() {
     source .env
     set +a
     
-    # Default values
-    WGER_DOMAIN=${WGER_DOMAIN:-wger.example.com}
-    TANDOOR_DOMAIN=${TANDOOR_DOMAIN:-tandoor.example.com}
-    N8N_DOMAIN=${N8N_DOMAIN:-n8n.example.com}
-    GRAFANA_DOMAIN=${GRAFANA_DOMAIN:-grafana.example.com}
-    CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL:-admin@example.com}
+    # Default values - using healthman.breyninc.co.za as base domain
+    BASE_DOMAIN=${BASE_DOMAIN:-healthman.breyninc.co.za}
+    WGER_DOMAIN=${WGER_DOMAIN:-wger.${BASE_DOMAIN}}
+    RECIPES_DOMAIN=${RECIPES_DOMAIN:-recipes.${BASE_DOMAIN}}
+    FLOW_DOMAIN=${FLOW_DOMAIN:-flow.${BASE_DOMAIN}}
+    DASH_DOMAIN=${DASH_DOMAIN:-dash.${BASE_DOMAIN}}
+    CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL:-admin@${BASE_DOMAIN}}
+    
+    # Export for envsubst
+    export WGER_DOMAIN RECIPES_DOMAIN FLOW_DOMAIN DASH_DOMAIN CADDY_ADMIN_EMAIL
     
     # Check if envsubst is available
     if command -v envsubst &> /dev/null; then
         envsubst < "$TEMPLATE" > "$OUTPUT"
         echo -e "${GREEN}Caddyfile generated at $OUTPUT${NC}"
+        echo -e "${GREEN}Domains configured:${NC}"
+        echo -e "  - Wger: ${WGER_DOMAIN}"
+        echo -e "  - Recipes: ${RECIPES_DOMAIN}"
+        echo -e "  - Flow (n8n): ${FLOW_DOMAIN}"
+        echo -e "  - Dash (Grafana): ${DASH_DOMAIN}"
     else
         echo -e "${YELLOW}envsubst not found. Please manually update Caddyfile from template.${NC}"
     fi

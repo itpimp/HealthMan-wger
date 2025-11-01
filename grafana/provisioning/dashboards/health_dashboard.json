@@ -1,0 +1,43 @@
+{
+  "id": null,
+  "title": "Health Overview",
+  "tags": ["health", "fitness"],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 1,
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Weight Trend",
+      "datasource": "PostgreSQL",
+      "targets": [
+        {
+          "rawSql": "SELECT date, weight FROM weight_weightentry ORDER BY date",
+          "format": "time_series"
+        }
+      ],
+      "xaxis": { "mode": "time" },
+      "yaxes": [{ "label": "kg" }, { "show": false }]
+    },
+    {
+      "type": "stat",
+      "title": "Last Fasting Duration",
+      "targets": [
+        {
+          "rawSql": "SELECT duration FROM fasting_fasts ORDER BY id DESC LIMIT 1",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Calories Consumed",
+      "targets": [
+        {
+          "rawSql": "SELECT date, calories FROM nutrition_mealplanentry ORDER BY date",
+          "format": "time_series"
+        }
+      ]
+    }
+  ]
+}

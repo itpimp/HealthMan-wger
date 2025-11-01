@@ -1,0 +1,27 @@
+{
+email ${CADDY_ADMIN_EMAIL}
+}
+
+
+# wger
+wger.example.com {
+reverse_proxy wger:${WGER_HOST_PORT}
+}
+
+
+# tandoor
+tandoor.example.com {
+reverse_proxy tandoor:${TANDOOR_HOST_PORT}
+}
+
+
+# n8n (protected by basic auth, but Caddy provides TLS)
+n8n.example.com {
+reverse_proxy n8n:5678
+}
+
+
+# grafana
+grafana.example.com {
+reverse_proxy grafana:3000
+}

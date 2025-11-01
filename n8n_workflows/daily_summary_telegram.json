@@ -1,0 +1,46 @@
+{
+  "name": "Daily Summary Telegram",
+  "nodes": [
+    {
+      "parameters": { "interval": 1, "unit": "days" },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://wger:8080/api/v2/notes/",
+        "method": "GET",
+        "authentication": "none"
+      },
+      "name": "Get Notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "Today's fasting logs:\\n{{ $json.results.map(n => n.comment).join('\\n') }}"
+      },
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "credentials": {
+        "telegramApi": {
+          "apiToken": "YOUR_TELEGRAM_BOT_TOKEN"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [[{ "node": "Get Notes", "type": "main", "index": 0 }]]
+    },
+    "Get Notes": {
+      "main": [[{ "node": "Send Telegram", "type": "main", "index": 0 }]]
+    }
+  }
+}

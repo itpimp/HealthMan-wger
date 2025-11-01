@@ -1,0 +1,39 @@
+{
+  "name": "Tandoor to Wger Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://tandoor:8081/api/recipes/?page_size=10",
+        "method": "GET",
+        "authentication": "none"
+      },
+      "name": "Get Recipes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://wger:8080/api/v2/mealplans/",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "{\"name\": \"{{ $json.results[0].name }}\", \"description\": \"Imported from Tandoor\"}"
+      },
+      "name": "Create Mealplan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [500, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "admin",
+          "password": "admin"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Recipes": {
+      "main": [[{ "node": "Create Mealplan", "type": "main", "index": 0 }]]
+    }
+  }
+}

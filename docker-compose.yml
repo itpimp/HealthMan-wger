@@ -1,8 +1,8 @@
-version: "3.9"
+#version: "3.9" # obsolete
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17
     container_name: ${COMPOSE_PROJECT_NAME}_postgres
     restart: unless-stopped
     environment:

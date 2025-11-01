@@ -21,18 +21,14 @@
     },
     {
       "parameters": {
-        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "Today's fasting logs:\\n{{ $json.results.map(n => n.comment).join('\\n') }}"
       },
       "name": "Send Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [800, 300],
-      "credentials": {
-        "telegramApi": {
-          "apiToken": "YOUR_TELEGRAM_BOT_TOKEN"
-        }
-      }
+      "notes": "Configure Telegram API credentials in n8n and set TELEGRAM_CHAT_ID and TELEGRAM_BOT_TOKEN environment variables."
     }
   ],
   "connections": {

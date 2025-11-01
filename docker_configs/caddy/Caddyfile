@@ -1,25 +1,21 @@
 {
-email ${CADDY_ADMIN_EMAIL}
+email admin@example.com
 }
-
 
 # wger
 wger.example.com {
-reverse_proxy wger:${WGER_HOST_PORT}
+reverse_proxy wger:8080
 }
-
 
 # tandoor
 tandoor.example.com {
-reverse_proxy tandoor:${TANDOOR_HOST_PORT}
+reverse_proxy tandoor:8081
 }
-
 
 # n8n (protected by basic auth, but Caddy provides TLS)
 n8n.example.com {
 reverse_proxy n8n:5678
 }
-
 
 # grafana
 grafana.example.com {

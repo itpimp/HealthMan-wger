@@ -1,22 +1,32 @@
-#version: "3.9" # obsolete
+version: "3.9"
 
 services:
   postgres:
     image: postgres:17
-    container_name: ${COMPOSE_PROJECT_NAME}_postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      # WSL/LXC: Reduce connection overhead
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - ./docker_data/postgres:/var/lib/postgresql/data
     networks:
       - healthnet
+    shm_size: 256mb
+    # WSL/LXC compatibility: shared memory for PostgreSQL
+    ulimits:
+      memlock: -1
+    tmpfs:
+      - /tmp
+    # WSL/LXC: Use host network for better compatibility (optional, comment out if not needed)
+    # network_mode: host
 
   redis:
     image: redis:7
-    container_name: ${COMPOSE_PROJECT_NAME}_redis
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_redis
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     restart: unless-stopped
     volumes:
@@ -25,11 +35,10 @@ services:
       - healthnet
 
   wger:
-    image: wger/server:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_wger
-    depends_on:
-      - postgres
-      - redis
+    build:
+      context: .
+      dockerfile: docker_definitions/wger/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_wger
     restart: unless-stopped
     environment:
       - DJANGO_SETTINGS_MODULE=wger.settings
@@ -43,19 +52,23 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
       - ./docker_data/wger:/home/wger/data
-      - ./custom/fasting_extension:/home/wger/src/fasting_extension
-      - ./custom/wger_overrides/settings_extra.py:/home/wger/src/wger/settings_extra.py
-      - ./custom/wger_overrides/urls_extra.py:/home/wger/src/wger/urls_extra.py
+      - ./docker_configs/custom/fasting_extension:/home/wger/src/fasting_extension
+      - ./docker_configs/custom/fasting_extension/wger_overrides/settings_extra.py:/home/wger/src/wger/settings_extra.py
+      - ./docker_configs/custom/fasting_extension/wger_overrides/urls_extra.py:/home/wger/src/wger/urls_extra.py
     networks:
       - healthnet
     expose:
       - "8080"
-
-  tandoor:
-    image: vabene1111/recipes:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_tandoor
+    # WSL/LXC: Wait for postgres to be ready instead of healthcheck
     depends_on:
       - postgres
+      - redis
+
+  tandoor:
+    build:
+      context: .
+      dockerfile: docker_definitions/tandoor/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_tandoor
     restart: unless-stopped
     environment:
       - SECRET_KEY=${TANDOOR_SECRET_KEY}
@@ -72,20 +85,19 @@ services:
       - healthnet
     expose:
       - "8081"
+    depends_on:
+      - postgres
 
   n8n:
     image: n8nio/n8n:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_n8n
-    depends_on:
-      - postgres
-      - redis
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_n8n
     restart: unless-stopped
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-true}
       - N8N_BASIC_AUTH_USER=${N8N_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-      - GENERIC_TIMEZONE=${TZ}
+      - GENERIC_TIMEZONE=${TZ:-UTC}
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
@@ -93,41 +105,59 @@ services:
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - EXECUTIONS_PROCESS=main
+      # SSL and URL Configuration
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-}
+      # WSL/LXC compatibility
+      - N8N_METRICS=false
+      - N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
     volumes:
       - ./docker_data/n8n:/home/node/.n8n
-      - ./n8n_workflows:/workflows
+      - ./docker_configs/n8n_workflows:/workflows
     networks:
       - healthnet
     expose:
       - "5678"
+    depends_on:
+      - postgres
+      - redis
 
   grafana:
     image: grafana/grafana:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_grafana
-    depends_on:
-      - postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
       - GF_SERVER_HTTP_PORT=3000
+      # WSL/LXC compatibility
+      - GF_INSTALL_PLUGINS=
     volumes:
       - ./docker_data/grafana:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./docker_configs/grafana/provisioning:/etc/grafana/provisioning
     networks:
       - healthnet
     expose:
       - "3000"
     mem_limit: 512m
+    depends_on:
+      - postgres
 
   caddy:
     image: caddy:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_caddy
+    container_name: ${COMPOSE_PROJECT_NAME:-HealthMan}_caddy
     restart: unless-stopped
+    environment:
+      - CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./docker_configs/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker_data/caddy:/data
       - ./docker_data/caddy_config:/config
     ports:
@@ -135,7 +165,16 @@ services:
       - "443:443"
     networks:
       - healthnet
+    depends_on:
+      - wger
+      - tandoor
+      - n8n
+      - grafana
 
 networks:
   healthnet:
     driver: bridge
+    # WSL/LXC: Use host network mode for better compatibility (alternative to above)
+    # Uncomment the line below and comment out driver: bridge if experiencing network issues
+    # driver: host
+

@@ -16,7 +16,7 @@
       "parameters": {
         "url": "http://wger:8080/api/v2/notes/",
         "method": "POST",
-        "authentication": "none",
+        "authentication": "httpBasicAuth",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "{\"comment\": \"Fasting {{ $json.action }} at {{ $json.timestamp }}\"}"
@@ -25,12 +25,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [500, 300],
-      "credentials": {
-        "httpBasicAuth": {
-          "user": "admin",
-          "password": "admin"
-        }
-      }
+      "notes": "Configure HTTP Basic Auth credentials in n8n. Use your wger username and API token."
     }
   ],
   "connections": {

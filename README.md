@@ -6,42 +6,67 @@ A self-hosted health tracking and planning environment, using mature, open-sourc
 
 HealthMan-wger integrates multiple open-source health and fitness applications into a unified, self-hosted stack:
 
-- **wger** - Workout and exercise tracking with custom fasting extension
-- **Tandoor Recipes** - Recipe management and meal planning
-- **n8n** - Workflow automation for health data synchronization
-- **Grafana** - Health metrics visualization and dashboards
-- **Caddy** - Reverse proxy with automatic HTTPS
+- **[wger](https://github.com/wger-project/wger)** - Workout and exercise tracking with custom fasting extension accessible through Telegram instant messenger
+- **[Tandoor Recipes](https://github.com/vabene1111/recipes)** - Recipe management and meal planning
+- **[n8n](https://github.com/n8n-io/n8n)** - Workflow automation for health data synchronization
+- **[Grafana](https://github.com/grafana/grafana)** - Health metrics visualization and dashboards
+- **[Caddy](https://github.com/caddyserver/caddy)** - Reverse proxy with automatic HTTPS
 
 ## Project Structure
 
 ```
 HealthMan-wger/
-├── docker-compose.yml       # Main orchestration file (in root)
+├── docker-compose.yml       # Main orchestration file
 ├── initial_setup.sh         # Consolidated setup script
+├── update_smtp.sh           # SMTP configuration update script
 ├── docker_definitions/      # Docker build definitions
 │   ├── wger/
 │   │   └── Dockerfile       # Custom wger image with extensions
-│   └── tandoor/
-│       └── Dockerfile       # Custom Tandoor image
+│   ├── tandoor/
+│   │   └── Dockerfile       # Custom Tandoor image
+│   ├── postgres/
+│   │   └── Dockerfile       # PostgreSQL with optimizations
+│   ├── redis/
+│   │   └── Dockerfile       # Redis configuration
+│   ├── n8n/
+│   │   └── Dockerfile       # n8n workflow automation
+│   ├── grafana/
+│   │   └── Dockerfile       # Grafana with provisioning
+│   └── caddy/
+│       └── Dockerfile       # Caddy reverse proxy
 ├── docker_configs/          # Configuration and customization files
 │   ├── caddy/              # Caddy reverse proxy config
 │   │   ├── Caddyfile       # Active Caddyfile (generated from template)
-│   │   └── Caddyfile.template  # Template for customization
+│   │   └── Caddyfile.template  # Template for domain customization
 │   ├── wger_extensions/     # Custom wger extensions
 │   │   └── fasting_extension/  # Fasting tracking extension
+│   │       ├── __init__.py
+│   │       ├── api.py       # REST API views
+│   │       ├── apps.py      # Django app configuration
+│   │       ├── models.py    # FastSession model
+│   │       ├── serializers.py  # API serializers
+│   │       ├── urls.py      # URL routing
+│   │       └── wger_overrides/
+│   │           ├── settings_extra.py  # Django settings extension
+│   │           └── urls_extra.py      # URL pattern extension
 │   ├── grafana/            # Grafana provisioning configs
 │   │   └── provisioning/
 │   │       ├── dashboards/ # Dashboard definitions
+│   │       │   └── health_dashboard.json
 │   │       └── datasources/ # Data source configurations
+│   │           └── datasource.yaml
 │   └── n8n_workflows/       # n8n automation workflows
+│       ├── daily_summary_telegram.json
+│       ├── fasting_log_webhook.json
+│       └── tandoor_to_wger_sync.json
 ├── docker_data/            # Persistent data storage (gitignored)
-│   ├── postgres/           # PostgreSQL data
-│   ├── redis/              # Redis data
+│   ├── postgres/           # PostgreSQL database files
+│   ├── redis/              # Redis data files
 │   ├── wger/               # wger application data
 │   ├── tandoor/            # Tandoor media files
 │   ├── n8n/                # n8n workflow data
 │   ├── grafana/            # Grafana configuration
-│   └── caddy/               # Caddy certificates and data
+│   └── caddy/              # Caddy certificates and data
 └── README.md
 ```
 
@@ -78,6 +103,9 @@ HealthMan-wger/
    - **Configure SMTP settings** (optional, for email notifications):
      - Edit `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
      - Or run `bash update_smtp.sh` after initial setup
+   - **Enable fail2ban** (optional, for internet exposure):
+     - Set `ENABLE_FAIL2BAN=true` in `.env`
+     - Run `bash initial_setup.sh --fail2ban` (requires sudo/root)
 
 4. **Start services**:
    ```bash
@@ -94,10 +122,12 @@ HealthMan-wger/
    bash initial_setup.sh --migrate-only
    ```
    
-   Or for full setup (env + Caddyfile + migrations):
+   Or for full setup (env + Caddyfile + migrations + fail2ban if enabled):
    ```bash
    bash initial_setup.sh --full
    ```
+   
+   **Note**: A `.env.example` file is included in the repository for reference.
 
 ### Configuration
 
@@ -124,6 +154,8 @@ Key environment variables (set in `.env` file):
 - `N8N_HOST` - n8n hostname
 - `N8N_PROTOCOL` - Protocol (https for SSL, http for localhost)
 - `N8N_EDITOR_BASE_URL` - Optional: Custom editor URL
+- `N8N_CORS_ORIGIN` - CORS allowed origins (comma-separated, or `*` for all, default: `*`)
+- `N8N_WEBHOOK_CORS` - Enable CORS for webhooks (true/false, default: true)
 
 **Caddy:**
 - `CADDY_ADMIN_EMAIL` - Email for Let's Encrypt certificates
@@ -330,6 +362,29 @@ SMTP_USE_TLS=true
 
 **Note:** If SMTP is not configured, email features will be disabled in these services. Services will continue to function normally without email notifications.
 
+#### n8n CORS Configuration
+
+For n8n webhooks to work properly from external domains (e.g., mobile apps, external websites), CORS must be configured:
+
+1. **Allow all origins** (development/testing):
+   ```bash
+   N8N_CORS_ORIGIN=*
+   N8N_WEBHOOK_CORS=true
+   ```
+
+2. **Restrict to specific domains** (production recommended):
+   ```bash
+   N8N_CORS_ORIGIN=https://app.example.com,https://mobile.example.com
+   N8N_WEBHOOK_CORS=true
+   ```
+
+3. **After updating**:
+   ```bash
+   docker compose restart n8n
+   ```
+
+**Security Note:** Using `*` allows any origin. For production, specify exact domains.
+
 ### Accessing Services
 
 After starting services, access them via:
@@ -465,6 +520,151 @@ This setup includes optimizations for WSL2 and Proxmox LXC containers:
 - Check wger container logs: `docker compose logs wger`
 - Verify volume mounts are correct
 - In WSL: Ensure Docker Desktop WSL integration is enabled
+
+## Web Application Firewall (WAF) Recommendations
+
+If exposing this system to the internet, implementing a WAF is strongly recommended to protect against common web attacks.
+
+### Recommended WAF Solutions
+
+#### 1. **Caddy Security Plugin** (Recommended - Integrated with Caddy)
+
+Since you're already using Caddy as a reverse proxy, the easiest integration is using Caddy's security features:
+
+**Option A: Caddy Security Module**
+- **GitHub**: [caddy-security](https://github.com/greenpau/caddy-security)
+- **Features**: Rate limiting, JWT authentication, IP filtering, bot protection
+- **Setup**: Extend Caddy Dockerfile to include the module
+
+**Option B: Caddy with fail2ban Integration**
+- Use Caddy's logging combined with fail2ban for automatic IP blocking
+- Monitor access logs and automatically ban suspicious IPs
+
+#### 2. **ModSecurity with Caddy**
+
+ModSecurity is a powerful open-source WAF that can be integrated with Caddy:
+
+- **GitHub**: [ModSecurity](https://github.com/SpiderLabs/ModSecurity)
+- **Caddy Module**: [caddy-modsecurity](https://github.com/jc21/caddy-modsecurity)
+- **Features**: OWASP Core Rule Set, SQL injection protection, XSS protection
+- **Setup**: Requires extending Caddy Dockerfile to build with ModSecurity module
+
+#### 3. **Cloudflare** (Cloud-Based, Easiest)
+
+If you're using Cloudflare for DNS, their free tier includes WAF:
+
+- **Setup**: Point your DNS to Cloudflare
+- **Features**: DDoS protection, WAF rules, rate limiting (free tier limited)
+- **Pros**: Easy setup, no server-side configuration, DDoS protection included
+- **Cons**: Cloud-based, requires using Cloudflare DNS
+
+**Configuration:**
+1. Move DNS to Cloudflare
+2. Enable "Proxy" (orange cloud) for your subdomains
+3. Enable WAF rules in Cloudflare dashboard
+4. Configure rate limiting rules
+
+#### 4. **Fail2ban** (Server-Level Protection)
+
+Fail2ban monitors logs and automatically bans IPs showing malicious behavior:
+
+- **GitHub**: [Fail2ban](https://github.com/fail2ban/fail2ban)
+- **Features**: Automatic IP banning, email notifications, custom filters
+- **Best for**: Protecting SSH, HTTP authentication, API endpoints
+
+**Basic Setup (Manual):**
+```bash
+# Install fail2ban
+sudo apt-get install fail2ban
+
+# Configure for n8n/webhooks
+# Create /etc/fail2ban/filter.d/n8n-webhook.conf
+# Create /etc/fail2ban/jail.d/n8n-webhook.conf
+```
+
+**Automated Setup (via initial_setup.sh):**
+1. Set `ENABLE_FAIL2BAN=true` in `.env` file
+2. Run: `sudo bash initial_setup.sh --fail2ban` (requires sudo/root)
+3. Or include in full setup: `sudo bash initial_setup.sh --full` (if ENABLE_FAIL2BAN=true)
+
+This will automatically:
+- Install fail2ban if not present (supports apt-get, yum, dnf)
+- Configure filters for n8n webhooks and healthman API authentication
+- Set up jails with appropriate ban times and retry limits:
+  - **n8n-webhook**: 5 failed attempts → 1 hour ban
+  - **healthman-auth**: 3 failed attempts → 2 hour ban
+- Create `/var/log/caddy/` directory for log monitoring
+- Enable and start fail2ban service
+
+**Note**: Requires Caddy logs to be written to `/var/log/caddy/` for fail2ban to monitor. Uncomment the log configuration in `Caddyfile.template` to enable file logging.
+
+#### 5. **nginx with ModSecurity** (Alternative Reverse Proxy)
+
+If you prefer nginx over Caddy, ModSecurity integration is well-documented:
+
+- **Setup**: Replace Caddy with nginx, install ModSecurity
+- **Documentation**: [nginx ModSecurity Guide](https://github.com/SpiderLabs/ModSecurity/wiki/Reference-Manual)
+
+### Implementation Recommendation
+
+**For most users: Start with Cloudflare**
+
+1. **Immediate Protection**: Set up Cloudflare for DNS (free tier includes basic WAF)
+2. **Additional Security**: Add fail2ban on your server for SSH and application-level protection
+3. **Advanced**: Consider Caddy Security Plugin or ModSecurity for deeper integration
+
+### Hardening Checklist
+
+- [ ] Enable Cloudflare WAF (if using Cloudflare DNS)
+- [ ] Install and configure fail2ban (set `ENABLE_FAIL2BAN=true` and run `sudo bash initial_setup.sh --fail2ban`)
+- [ ] Set up rate limiting in Caddy (caddy-security module already included, uncomment in Caddyfile.template)
+- [ ] Enable Caddy file logging for fail2ban (uncomment log block in Caddyfile.template)
+- [ ] Configure CORS properly (restrict origins, don't use `*` in production)
+- [ ] Enable basic authentication where available (n8n already configured)
+- [ ] Regularly update all containers
+- [ ] Monitor logs for suspicious activity
+- [ ] Configure caddy-security features as needed (JWT, IP filtering, bot protection)
+
+### Caddy Security Module
+
+The Caddy Dockerfile already includes the [caddy-security](https://github.com/greenpau/caddy-security) module, which provides:
+
+- **Rate Limiting**: Protect against DDoS and brute force attacks
+- **JWT Authentication**: Secure API endpoints
+- **IP Filtering**: Block or allow specific IPs
+- **Bot Protection**: Filter malicious bots
+- **Authentication Portal**: User authentication gateway
+
+**Current Status**: ✅ **Already Integrated**
+
+The Caddy image is built with caddy-security module included. To enable features:
+
+1. **Uncomment rate limiting** in `docker_configs/caddy/Caddyfile.template` (see example comments)
+2. **Add security blocks** to your Caddyfile for specific protection needs
+3. **Rebuild Caddy** if you've already built it: `docker compose build caddy`
+
+**Example Caddyfile with Security:**
+```caddy
+{
+email admin@example.com
+log {
+    output file /var/log/caddy/access.log
+}
+}
+
+example.com {
+    rate_limit {
+        zone dynamic {
+            key {remote_host}
+            events 50
+            window 1m
+        }
+    }
+    reverse_proxy app:8080
+}
+```
+
+**Note**: For basic protection, start with Cloudflare and fail2ban. Enable caddy-security features as needed.
 
 ## License
 

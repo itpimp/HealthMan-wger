@@ -1,9 +1,25 @@
 {
 email {$CADDY_ADMIN_EMAIL}
+# Enable caddy-security logging (optional - uncomment if using fail2ban)
+# log {
+#     output file /var/log/caddy/access.log {
+#         roll_size 100mb
+#         roll_keep 5
+#     }
+# }
 }
 
 # wger - Workout and exercise tracking
 {$WGER_DOMAIN} {
+# Rate limiting (caddy-security)
+# Uncomment to enable rate limiting
+# rate_limit {
+#     zone dynamic {
+#         key {remote_host}
+#         events 50
+#         window 1m
+#     }
+# }
 reverse_proxy wger:8080
 }
 

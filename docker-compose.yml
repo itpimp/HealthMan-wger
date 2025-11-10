@@ -133,6 +133,9 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
       - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-}
+      # CORS Configuration (for webhook access from external domains)
+      - N8N_CORS_ORIGIN=${N8N_CORS_ORIGIN:-*}
+      - N8N_WEBHOOK_CORS=${N8N_WEBHOOK_CORS:-true}
       # WSL/LXC compatibility
       - N8N_METRICS=false
       - N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false

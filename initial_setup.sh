@@ -96,6 +96,9 @@ N8N_ENCRYPTION_KEY=__N8N_ENCRYPTION_KEY__
 N8N_WEBHOOK_URL=https://flow.healthman.breyninc.co.za
 N8N_HOST=flow.healthman.breyninc.co.za
 N8N_PROTOCOL=https
+# CORS Configuration (comma-separated list of allowed origins, or * for all)
+N8N_CORS_ORIGIN=*
+N8N_WEBHOOK_CORS=true
 
 # Grafana Configuration
 GRAFANA_USER=admin
@@ -117,6 +120,9 @@ SMTP_FROM_EMAIL=your-email@gmail.com
 
 # Timezone
 TZ=UTC
+
+# Fail2ban Configuration (optional - set to true to enable fail2ban setup)
+ENABLE_FAIL2BAN=false
 EOF
         echo -e "${GREEN}Created $EXAMPLE. Please review and customize.${NC}"
     fi
@@ -141,6 +147,91 @@ EOF
     
     echo -e "${GREEN}Created $ENV with generated secrets.${NC}"
     echo -e "${YELLOW}Please review and edit values like CADDY_ADMIN_EMAIL, passwords, and domains.${NC}"
+}
+
+# Setup fail2ban (optional)
+setup_fail2ban() {
+    local ENABLE_FAIL2BAN=${ENABLE_FAIL2BAN:-false}
+    
+    if [[ "$ENABLE_FAIL2BAN" != "true" ]]; then
+        echo -e "${YELLOW}Skipping fail2ban setup (ENABLE_FAIL2BAN not set to true).${NC}"
+        return 0
+    fi
+    
+    echo -e "${GREEN}Setting up fail2ban...${NC}"
+    
+    # Check if running as root or with sudo
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${YELLOW}Note: fail2ban setup requires root/sudo privileges.${NC}"
+        echo -e "${YELLOW}You can set up fail2ban manually later or run this script with sudo.${NC}"
+        return 0
+    fi
+    
+    # Check if fail2ban is installed
+    if ! command -v fail2ban-client &> /dev/null; then
+        echo -e "${YELLOW}Installing fail2ban...${NC}"
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y fail2ban
+        elif command -v yum &> /dev/null; then
+            yum install -y fail2ban
+        elif command -v dnf &> /dev/null; then
+            dnf install -y fail2ban
+        else
+            echo -e "${RED}Package manager not found. Please install fail2ban manually.${NC}" >&2
+            return 1
+        fi
+    fi
+    
+    # Create n8n webhook filter
+    cat > /etc/fail2ban/filter.d/n8n-webhook.conf << 'EOF'
+[Definition]
+failregex = ^.*"method":"(GET|POST).*"statusCode":(401|403|429).*$
+ignoreregex =
+EOF
+    
+    # Create n8n webhook jail
+    mkdir -p /etc/fail2ban/jail.d
+    
+    cat > /etc/fail2ban/jail.d/n8n-webhook.conf << 'EOF'
+[n8n-webhook]
+enabled = true
+port = 80,443
+filter = n8n-webhook
+logpath = /var/log/caddy/*.log
+maxretry = 5
+bantime = 3600
+findtime = 600
+EOF
+    
+    # Create Caddy log directory if it doesn't exist
+    mkdir -p /var/log/caddy
+    chmod 755 /var/log/caddy
+    
+    # Create wger/tandoor filter for failed auth
+    cat > /etc/fail2ban/filter.d/healthman-auth.conf << 'EOF'
+[Definition]
+failregex = ^.*"method":"(GET|POST).*"statusCode":401.*"uri":"/api/.*$
+ignoreregex =
+EOF
+    
+    cat > /etc/fail2ban/jail.d/healthman-auth.conf << 'EOF'
+[healthman-auth]
+enabled = true
+port = 80,443
+filter = healthman-auth
+logpath = /var/log/caddy/*.log
+maxretry = 3
+bantime = 7200
+findtime = 600
+EOF
+    
+    # Start and enable fail2ban
+    systemctl enable fail2ban || true
+    systemctl restart fail2ban || service fail2ban restart || true
+    
+    echo -e "${GREEN}fail2ban configured successfully!${NC}"
+    echo -e "${YELLOW}Note: Make sure Caddy logs are written to /var/log/caddy/ for fail2ban to work.${NC}"
+    echo -e "${YELLOW}You may need to configure Caddy to log to /var/log/caddy/access.log${NC}"
 }
 
 # Process Caddyfile from template
@@ -252,17 +343,34 @@ main() {
         process_caddyfile
         if [[ "${1:-}" == "--full" ]]; then
             apply_migrations
+            # Load .env to check ENABLE_FAIL2BAN
+            if [ -f ".env" ]; then
+                set -a
+                source .env
+                set +a
+                if [[ "${ENABLE_FAIL2BAN:-false}" == "true" ]]; then
+                    setup_fail2ban
+                fi
+            fi
         fi
     elif [[ "${1:-}" == "--migrate-only" ]]; then
         apply_migrations
     elif [[ "${1:-}" == "--caddy-only" ]]; then
         process_caddyfile
+    elif [[ "${1:-}" == "--fail2ban" ]]; then
+        if [ -f ".env" ]; then
+            set -a
+            source .env
+            set +a
+        fi
+        setup_fail2ban
     else
         echo -e "${YELLOW}Optional flags:${NC}"
-        echo "  --full         : Generate env, process Caddyfile, and run migrations"
+        echo "  --full         : Generate env, process Caddyfile, run migrations, and setup fail2ban (if enabled)"
         echo "  --migrate      : Process Caddyfile and run migrations"
         echo "  --migrate-only : Only run database migrations"
         echo "  --caddy-only   : Only process Caddyfile template"
+        echo "  --fail2ban     : Setup fail2ban (requires ENABLE_FAIL2BAN=true in .env)"
     fi
 }
 

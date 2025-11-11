@@ -63,7 +63,8 @@ generate_env() {
         echo -e "${YELLOW}Creating a basic .env.example template...${NC}"
         cat > "$EXAMPLE" << 'EOF'
 # HealthMan-wger Environment Variables
-COMPOSE_PROJECT_NAME=HealthMan
+COMPOSE_PROJECT_NAME=healthman
+COMPOSE_PROJECT_HUMAN_NAME=HealthMan
 
 # Base Domain Configuration
 BASE_DOMAIN=healthman.breyninc.co.za
